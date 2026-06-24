@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Profile</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script>
+const user = HQ.requireAuth();
+if (!user) throw new Error('not authed');
+
+function render() {
+  const u = HQ.getUser(user.id);
+  const streak = HQ.getStreak(u.id);
+  const badges = HQ.checkBadgeUnlocks(u);
+
+  return `
+    ${renderTopbar('👤 Profile', u)}
+    <div class="container">
+      <div class="card profile-header">
+        <div class="profile-photo-large" id="profilePhoto">
+          ${u.profilePhoto
+            ? `<img src="${u.profilePhoto}" alt="Profile">`
+            : `<div class="photo-placeholder">${(u.fullName || u.username).charAt(0).toUpperCase()}</div>`}
+        </div>
+        <h2>${u.fullName}</h2>
+        <p class="muted">@${u.username} · ${u.township}</p>
+        <div class="rank-pill rank-${u.rank.toLowerCase()}">${HQ.rankIcon(u.rank)} ${u.rank} Rank</div>
+      </div>
+
+      <div class="section-header"><h2>📊 Your Stats</h2></div>
+      <div class="stats-row">
+        <div class="stat-tile"><div class="stat-value">${u.xp}</div><div class="stat-label">Total XP</div></div>
+        <div class="stat-tile"><div class="stat-value">${u.coins}</div><div class="stat-label">Coins</div></div>
+        <div class="stat-tile"><div class="stat-value">${streak.count}</div><div class="stat-label">Day Streak</div></div>
+      </div>
+
+      <div class="section-header"><h2>🏅 Badges (${badges.length})</h2></div>
+      ${badges.length === 0
+        ? '<div class="card empty-state">Complete quests to earn badges!</div>'
+        : `<div class="badge-grid">${badges.map(b => `<div class="badge"><div class="badge-icon">${b.icon}</div><div class="badge-name">${b.name}</div></div>`).join('')}</div>`}
+
+      <div class="section-header"><h2>✏️ Edit Profile</h2></div>
+      <form id="profileForm" class="card form-card">
+        <label>Full Name<input type="text" id="fullName" value="${u.fullName || ''}" required></label>
+        <label>Email<input type="email" id="email" value="${u.email || ''}" required></label>
+        <label>Age<input type="number" id="age" min="13" max="120" value="${u.age || ''}"></label>
+        <label>Township
+          <select id="township">
+            <option value="">Select township</option>
+            ${['Mamelodi', 'Soshanguve', 'Tembisa', 'Atteridgeville', 'Hammanskraal', 'Other'].map(t =>
+              `<option ${u.township === t ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </label>
+        <label>Bio<textarea id="bio" rows="3">${u.bio || ''}</textarea></label>
+        <label>Profile Photo
+          <input type="file" id="photoInput" accept="image/*">
+        </label>
+        <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
+      </form>
+
+      <div class="section-header"><h2>🎯 Your Goals</h2></div>
+      <div class="card">
+        ${(u.goals || []).length === 0
+          ? '<p class="muted">No health goals set yet.</p>'
+          : '<div class="chip-row">' + (u.goals || []).map(g => `<span class="chip">${g}</span>`).join('') + '</div>'}
+        ${(u.interests || []).length === 0
+          ? ''
+          : '<div class="chip-row">' + (u.interests || []).map(g => `<span class="chip accent">${g}</span>`).join('') + '</div>'}
+        <a href="goals.html" class="btn btn-secondary btn-full" style="margin-top:12px">Update Goals</a>
+      </div>
+
+      <div class="section-header"><h2>⚙️ Account</h2></div>
+      <div class="card">
+        <button class="btn btn-danger btn-full" onclick="logout()">Log Out</button>
+      </div>
+    </div>
+    ${renderBottomNav('profile')}
+  `;
+}
+
+window.logout = function() {
+  if (confirm('Log out of HealthQuest?')) {
+    HQ.clearSession();
+    window.location.href = 'index.html';
+  }
+};
+
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'photoInput') {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      HQ.updateUser(user.id, { profilePhoto: ev.target.result });
+      render();
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+document.addEventListener('submit', function(e) {
+  if (e.target.id === 'profileForm') {
+    e.preventDefault();
+    HQ.updateUser(user.id, {
+      fullName: document.getElementById('fullName').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      age: parseInt(document.getElementById('age').value) || null,
+      township: document.getElementById('township').value,
+      bio: document.getElementById('bio').value.trim()
+    });
+    alert('Profile updated ✅');
+    render();
+  }
+});
+
+document.getElementById('app').innerHTML = render();
+</script>
+</body>
+</html>

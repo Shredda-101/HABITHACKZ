@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color"="#0e1a14">
+<title>HealthQuest — Zombie Chase</title>
+<link rel="stylesheet" href="css/styles.css">
+<style>
+/* Zombie Chase — scoped styles. The design system tokens in styles.css give us
+   the colour palette; we only add the canvas and HUD chrome. */
+:root {
+  --road:    #1a2421;
+  --road-2:  #2a3a32;
+  --lane:    #f4d35e;
+  --grass-1: #2e4a2c;
+  --grass-2: #3a5a36;
+  --house-1: #6b4a2a;
+  --house-2: #8a6240;
+  --house-3: #5a3a20;
+  --runner:  #4caf50;
+  --zombie:  #7a8c5a;
+  --zombie-fast: #c24444;
+  --blood:   #b71c1c;
+}
+.run-shell {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: #0e1a14;
+  color: #f1f1e8;
+  min-height: 100vh;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+}
+.run-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: rgba(0,0,0,0.35);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.run-topbar h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+.run-topbar .streak-badge {
+  background: rgba(255,255,255,0.12);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.run-stage {
+  position: relative;
+  width: 100%;
+  height: 60vh;
+  min-height: 360px;
+  background: linear-gradient(180deg, #0e1a14 0%, #1a2421 100%);
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+#chaseCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.hud {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px;
+  pointer-events: none;
+  z-index: 2;
+}
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hud-pill {
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.hud-pill .hud-value { color: var(--lane); font-variant-numeric: tabular-nums; }
+.hud-pill.alert .hud-value { color: var(--blood); }
+.hud-rank {
+  background: linear-gradient(135deg, rgba(76,175,80,0.25), rgba(76,175,80,0.05));
+  border-color: rgba(76,175,80,0.4);
+}
+.hud-distance .hud-value { font-size: 16px; }
+.hud-heart {
+  display: flex;
+  gap: 3px;
+}
+.hud-heart .heart {
+  font-size: 16px;
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+}
+.hud-heart .heart.lost { opacity: 0.18; }
+
+.controls {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.4) 100%);
+}
+.controls-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+.run-btn {
+  pointer-events: auto;
+  flex: 1;
+  max-width: 220px;
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(76,175,80,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+  letter-spacing: 0.3px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.run-btn:disabled {
+  background: #2a3a32;
+  color: #888;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.run-btn:not(:disabled):active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow: 0 2px 10px rgba(76,175,80,0.3);
+}
+.run-btn.secondary {
+  background: rgba(255,255,255,0.1);
+  color: #f1f1e8;
+  border: 1px solid rgba(255,255,255,0.15);
+  max-width: 140px;
+  box-shadow: none;
+}
+.tap-hint {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 0.3px;
+  min-height: 16px;
+}
+.bonus-toast {
+  position: absolute;
+  left: 50%;
+  top: 35%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, #f4d35e, #e0a82e);
+  color: #1a2421;
+  font-weight: 800;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 15px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+}
+.bonus-toast.show {
+  animation: bonusPop 1.2s ease forwards;
+}
+@keyframes bonusPop {
+  0%   { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+  20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  35%  { transform: translate(-50%, -52%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -90%) scale(0.9); }
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 18, 14, 0.92);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  z-index: 4;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.overlay.show { display: flex; }
+.overlay h2 {
+  font-size: 26px;
+  margin: 0 0 6px;
+  font-weight: 800;
+}
+.overlay p { color: rgba(255,255,255,0.7); margin: 4px 0 18px; font-size: 14px; }
+.overlay .result-emoji { font-size: 56px; margin-bottom: 8px; }
+.overlay .stat-row {
+  display: flex;
+  gap: 14px;
+  margin: 8px 0 22px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.overlay .stat {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 92px;
+}
+.overlay .stat .v { font-size: 20px; font-weight: 800; color: var(--lane); }
+.overlay .stat .l { font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; }
+.overlay .btn-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.intro-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin: 6px 0 18px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.5;
+  max-width: 320px;
+}
+.intro-card strong { color: var(--lane); }
+.history {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 14px 18px 80px;
+}
+.history h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 8px;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.history-item .em { font-size: 18px; }
+.history-item .meta { color: rgba(255,255,255,0.5); font-size: 11px; }
+.history-item .ml { margin-left: auto; font-weight: 700; }
+.medal-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 14px 0 4px;
+}
+.medal {
+  font-size: 28px;
+  filter: grayscale(0);
+}
+</style>
+</head>
+<body>
+<div class="run-shell">
+  <div class="run-topbar">
+    <h1>🧟 Zombie Chase</h1>
+    <div class="streak-badge" id="streakBadge">🔥 0</div>
+  </div>
+
+  <div class="run-stage" id="stage">
+    <canvas id="chaseCanvas"></canvas>
+
+    <div class="hud">
+      <div class="hud-row">
+        <div class="hud-pill hud-rank"><span>🎖️</span> <span id="hudRank">Bronze</span></div>
+        <div class="hud-pill hud-distance">📏 <span class="hud-value" id="hudDistance">0 m</span></div>
+      </div>
+      <div class="hud-row" style="align-items:flex-end">
+        <div class="hud-pill">👟 <span class="hud-value" id="hudSteps">0</span></div>
+        <div class="hud-pill" id="hudLivesWrap">
+          <div class="hud-heart" id="hudLives">
+            <span class="heart">❤️</span>
+            <span class="heart">❤️</span>
+            <span class="heart">❤️</span>
+          </div>
+        </div>
+        <div class="hud-pill">⏱️ <span class="hud-value" id="hudTime">00:00</span></div>
+      </div>
+    </div>
+
+    <div class="bonus-toast" id="bonusToast"></div>
+
+    <div class="overlay show" id="introOverlay">
+      <div class="result-emoji">🧟‍♂️🏃💨</div>
+      <h2>Outrun the Horde</h2>
+      <p>Tap <strong>RUN</strong> to advance. Zombies are gaining on you — reach the goal distance for your rank before they catch you.</p>
+      <div class="intro-card" id="introDetails">…</div>
+      <div class="btn-stack">
+        <button class="run-btn" id="startBtn">Start Chase</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="endOverlay">
+      <div class="result-emoji" id="endEmoji">🎉</div>
+      <h2 id="endTitle">You Escaped!</h2>
+      <p id="endSubtitle">The horde fell behind.</p>
+      <div class="stat-row">
+        <div class="stat"><div class="v" id="endDistance">0 m</div><div class="l">Distance</div></div>
+        <div class="stat"><div class="v" id="endSteps">0</div><div class="l">Steps</div></div>
+        <div class="stat"><div class="v" id="endTime">0:00</div><div class="l">Time</div></div>
+        <div class="stat"><div class="v" id="endXp">+0 XP</div><div class="l">Reward</div></div>
+      </div>
+      <div class="medal-row" id="medalRow" style="display:none">
+        <span class="medal" data-medal="bronze">🥉</span>
+        <span class="medal" data-medal="silver">🥈</span>
+        <span class="medal" data-medal="gold">🥇</span>
+      </div>
+      <div class="btn-stack">
+        <button class="run-btn" id="againBtn">Run Again</button>
+        <button class="run-btn secondary" id="backBtn">Back to Dashboard</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="controls-row">
+      <button class="run-btn" id="runBtn" disabled>RUN</button>
+    </div>
+    <div class="tap-hint" id="tapHint">Press Start Chase to begin</div>
+  </div>
+
+  <div class="history" id="history"></div>
+</div>
+
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script>
+/* ============================================================
+ * Zombie Chase — game engine
+ * ----------------------------------------------------------
+ * Top-down canvas game. Tap "RUN" to advance the runner along
+ * the road. Zombies spawn behind the runner and gain ground
+ * over time. The runner must reach HQ.RUN_DISTANCES[rank] m
+ * before a zombie reaches them.
+ *
+ * State model:
+ *   state = { phase: 'idle'|'playing'|'win'|'caught',
+ *             distance, steps, startedAt, runnerY, zombieY[] }
+ *
+ * Everything is time-based; frames are driven by rAF.
+ * Distance is computed from steps × stride to keep the math
+ * honest and reward real button presses.
+ * ============================================================ */
+(function () {
+  'use strict';
+
+  const user = HQ.requireAuth();
+  if (!user) return;
+
+  // ---- DOM refs ----
+  const $ = (id) => document.getElementById(id);
+  const stage        = $('stage');
+  const canvas       = $('chaseCanvas');
+  const ctx          = canvas.getContext('2d');
+  const hudDistance  = $('hudDistance');
+  const hudSteps     = $('hudSteps');
+  const hudTime      = $('hudTime');
+  const hudRank      = $('hudRank');
+  const hudLives     = $('hudLives');
+  const bonusToast   = $('bonusToast');
+  const introOverlay = $('introOverlay');
+  const endOverlay   = $('endOverlay');
+  const runBtn       = $('runBtn');
+  const startBtn     = $('startBtn');
+  const againBtn     = $('againBtn');
+  const backBtn      = $('backBtn');
+  const tapHint      = $('tapHint');
+  const streakBadge  = $('streakBadge');
+  const introDetails = $('introDetails');
+
+  // ---- Constants ----
+  const STRIDE_M         = 0.85;   // metres per tap
+  const STRIDE_BASE_PX   = 9;      // pixels per tap (visual)
+  const ZOMBIE_BASE_RATE = 0.55;   // px per frame a single zombie closes in
+  const ZOMBIE_SPAWN_EVERY_MS = 3200;
+  const ZOMBIE_MAX       = 5;
+  const RUN_DURATIONS_MS = 180;    // ms per "step" pulse on the canvas
+  const LANE_WIDTH_RATIO = 0.42;   // road takes ~42% of canvas width
+  const TILE_SIZE        = 36;     // px per house / grass tile
+  const HEART_COUNT      = 3;
+  const MILESTONES_M     = [250, 500, 1000, 1500, 2000, 3000, 4000];
+  const MILESTONE_REWARD = { 250: 10, 500: 25, 1000: 60, 1500: 90, 2000: 130, 3000: 200, 4000: 280 };
+
+  // ---- Game state ----
+  let dpr = 1;
+  let W = 0, H = 0;
+  let state = freshState();
+  let rafId = null;
+  let lastFrame = 0;
+  let lastZombieSpawn = 0;
+  let runnerBob = 0;
+  let milestoneReached = new Set();
+  let shakers = 0;            // screen shake frames remaining
+  let cameraY = 0;            // pixels scrolled; ties pixel-space to metres
+
+  function freshState() {
+    return {
+      phase: 'idle',
+      distance: 0,
+      steps: 0,
+      startedAt: 0,
+      elapsedMs: 0,
+      runnerLane: 0,           // -1 left, 0 mid, 1 right
+      runnerBob: 0,
+      zombies: [],             // {lane, distFromRunner (m), kind, speed}
+      lives: HEART_COUNT,
+    };
+  }
+
+  // ---- Setup ----
+  function resize() {
+    const r = stage.getBoundingClientRect();
+    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    canvas.width  = Math.floor(r.width * dpr);
+    canvas.height = Math.floor(r.height * dpr);
+    W = r.width;
+    H = r.height;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+
+  // Get the rank target distance in metres.
+  function distanceTarget() {
+    const rank = user.rank || 'Bronze';
+    return HQ.RUN_TARGETS[rank] || HQ.RUN_TARGETS.Bronze;
+  }
+
+  // ---- Input ----
+  function step() {
+    if (state.phase !== 'playing') return;
+    state.steps += 1;
+    state.distance = Math.min(distanceTarget(), +(state.steps * STRIDE_M).toFixed(2));
+    state.runnerBob = 1;                 // triggers a pulse on next frame
+    state.elapsedMs = Date.now() - state.startedAt;
+
+    // Check milestones
+    for (const m of MILESTONES_M) {
+      if (state.distance >= m && !milestoneReached.has(m)) {
+        milestoneReached.add(m);
+        const reward = MILESTONE_REWARD[m] || 0;
+        showBonus(`+${reward} coins · ${m}m`);
+        HQ.addCoins(user.id, reward);
+      }
+    }
+
+    if (state.distance >= distanceTarget()) {
+      finishRun('win');
+    }
+  }
+
+  runBtn.addEventListener('click', step);
+  // Keyboard support — useful for testing and accessibility.
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.key === 'Enter') {
+      e.preventDefault();
+      if (state.phase === 'idle') startRun();
+      else if (state.phase === 'playing') step();
+    }
+    if (e.code === 'ArrowLeft'  && state.phase === 'playing') moveLane(-1);
+    if (e.code === 'ArrowRight' && state.phase === 'playing') moveLane( 1);
+  });
+
+  // Swipe / pointer to change lanes (bonus, not required).
+  let pointerStartX = null;
+  stage.addEventListener('pointerdown', (e) => {
+    pointerStartX = e.clientX;
+  });
+  stage.addEventListener('pointerup', (e) => {
+    if (pointerStartX == null || state.phase !== 'playing') return;
+    const dx = e.clientX - pointerStartX;
+    if (Math.abs(dx) > 30) moveLane(dx > 0 ? 1 : -1);
+    pointerStartX = null;
+  });
+
+  function moveLane(dir) {
+    if (state.phase !== 'playing') return;
+    state.runnerLane = Math.max(-1, Math.min(1, state.runnerLane + dir));
+  }
+
+  // ---- Run lifecycle ----
+  function startRun() {
+    state = freshState();
+    state.phase = 'playing';
+    state.startedAt = Date.now();
+    milestoneReached = new Set();
+    runBtn.disabled = false;
+    introOverlay.classList.remove('show');
+    endOverlay.classList.remove('show');
+    tapHint.textContent = 'Tap RUN to take a step. Change lanes with the arrow buttons or by swiping.';
+    startBtn.textContent = 'Restart';
+    lastFrame = performance.now();
+    lastZombieSpawn = lastFrame;
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function finishRun(result) {
+    state.phase = result;
+    state.elapsedMs = Date.now() - state.startedAt;
+    runBtn.disabled = true;
+    cancelAnimationFrame(rafId);
+    rafId = null;
+    showEndScreen(result);
+    HQ.recordZombieChaseRun(user.id, {
+      result,
+      distance: state.distance,
+      steps: state.steps,
+      duration: Math.round(state.elapsedMs / 1000),
+    });
+  }
+
+  // ---- Zombie manager ----
+  function spawnZombie(now) {
+    if (state.zombies.length >= ZOMBIE_MAX) return;
+    const lane = Math.floor(Math.random() * 3) - 1;   // -1, 0, 1
+    const isFast = Math.random() < 0.25 && (user.rank === 'Gold' || user.rank === 'Platinum' || user.rank === 'Diamond');
+    state.zombies.push({
+      lane,
+      distFromRunner: 18 + Math.random() * 12,         // metres behind
+      speed: isFast ? 1.6 : 1.0,
+      kind: isFast ? 'runner' : 'walker',
+      wobble: Math.random() * Math.PI * 2,
+    });
+  }
+
+  function updateZombies(dtMs) {
+    const dt = dtMs / 1000;                           // seconds
+    // Rank-based difficulty: higher rank => faster horde
+    const rankSpeed = { Bronze: 1.0, Silver: 1.1, Gold: 1.25, Platinum: 1.4, Diamond: 1.55 }[user.rank || 'Bronze'] || 1.0;
+    const closeRate = ZOMBIE_BASE_RATE * rankSpeed * dt;  // px per frame approx
+
+    for (const z of state.zombies) {
+      // Convert metres-behind to pixel lag: 1m ~= 1.4 * STRIDE_BASE_PX
+      const lagPx = z.distFromRunner * 1.4 * STRIDE_BASE_PX;
+      // Move z closer by reducing lag
+      const reduction = (closeRate * z.speed * 18);
+      z.distFromRunner = Math.max(0, z.distFromRunner - reduction / (1.4 * STRIDE_BASE_PX));
+      z.wobble += dt * 4;
+    }
+
+    // Same-lane collision check
+    for (const z of state.zombies) {
+      if (z.lane === state.runnerLane && z.distFromRunner < 1.6) {
+        onZombieHit(z);
+        break;
+      }
+    }
+
+    // Drop zombies that are very far behind (player outran them) — only if
+    // we're well into the run, so we don't trim the initial wave.
+    if (state.distance > 50) {
+      state.zombies = state.zombies.filter(z => z.distFromRunner < 60);
+    }
+  }
+
+  function onZombieHit(z) {
+    // Remove the biting zombie
+    state.zombies = state.zombies.filter(zz => zz !== z);
+    state.lives = Math.max(0, state.lives - 1);
+    shakers = 14;
+    updateLivesHud();
+    if (state.lives <= 0) {
+      finishRun('caught');
+    } else {
+      HQ.toast('A zombie caught you! -1 ❤️', 1600);
+    }
+  }
+
+  // ---- Main loop ----
+  function loop(now) {
+    const dtMs = Math.min(64, now - lastFrame);   // clamp big tab-switch gaps
+    lastFrame = now;
+    if (state.phase === 'playing') {
+      if (now - lastZombieSpawn > ZOMBIE_SPAWN_EVERY_MS) {
+        spawnZombie(now);
+        lastZombieSpawn = now;
+      }
+      updateZombies(dtMs);
+      state.elapsedMs = Date.now() - state.startedAt;
+    }
+    render(now, dtMs);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // ---- Rendering ----
+  function laneCenterX(lane) {
+    const roadLeft  = (W - W * LANE_WIDTH_RATIO) / 2;
+    const roadRight = roadLeft + W * LANE_WIDTH_RATIO;
+    return roadLeft + (roadRight - roadLeft) * (lane === 0 ? 0.5 : lane === -1 ? 0.22 : 0.78);
+  }
+  const roadRect = () => ({
+    left:  (W - W * LANE_WIDTH_RATIO) / 2,
+    right: (W - W * LANE_WIDTH_RATIO) / 2 + W * LANE_WIDTH_RATIO,
+  });
+
+  function render(now, dtMs) {
+    // Background: night sky over township
+    ctx.fillStyle = '#0e1a14';
+    ctx.fillRect(0, 0, W, H);
+
+    // Side strips (grass) — slight parallax with distance
+    const skyH = Math.max(0, H * 0.18);
+    ctx.fillStyle = '#1a2a22';
+    ctx.fillRect(0, 0, W, skyH);
+    // moon
+    ctx.fillStyle = 'rgba(244, 211, 94, 0.85)';
+    ctx.beginPath();
+    ctx.arc(W * 0.82, skyH * 0.5, Math.min(28, skyH * 0.35), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0e1a14';
+    ctx.beginPath();
+    ctx.arc(W * 0.82 + 6, skyH * 0.5 - 3, Math.min(26, skyH * 0.32), 0, Math.PI * 2);
+    ctx.fill();
+
+    const road = roadRect();
+
+    // Road body
+    ctx.fillStyle = '#1a2421';
+    ctx.fillRect(road.left, 0, road.right - road.left, H);
+    // Road edges
+    ctx.fillStyle = '#3a4a3a';
+    ctx.fillRect(road.left - 2, 0, 2, H);
+    ctx.fillRect(road.right, 0, 2, H);
+
+    // Lane dividers (dashed)
+    ctx.strokeStyle = 'rgba(244, 211, 94, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([14, 14]);
+    ctx.beginPath();
+    ctx.moveTo(W / 2, 0);
+    ctx.lineTo(W / 2, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Side grass + houses (parallax). CameraY scrolls; tiles are placed in world
+    // space, so they naturally move toward the camera as the player advances.
+    cameraY += state.phase === 'playing' ? 0 : 0;
+    const scrollPx = state.distance * 1.4 * STRIDE_BASE_PX;
+    drawTownship(road.left, road.right, scrollPx);
+
+    // Render zombies first so the runner overlays them.
+    drawZombies(road);
+
+    // Runner
+    drawRunner(road, now);
+
+    // Vignette + shake
+    drawVignette();
+    if (shakers > 0) {
+      shakers -= 1;
+      const intensity = 6;
+      const dx = (Math.random() - 0.5) * intensity;
+      const dy = (Math.random() - 0.5) * intensity;
+      ctx.save();
+      ctx.translate(dx, dy);
+      // redraw simple overlay border
+      ctx.fillStyle = 'rgba(183, 28, 28, 0.15)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+
+    // HUD updates (cheap text only)
+    updateHud();
+  }
+
+  function drawTownship(roadLeft, roadRight, scrollPx) {
+    // Houses / trees on the left and right strips. The strip widths are
+    // (W - roadW) / 2 each. Tiles loop vertically as the player advances.
+    const stripW = roadLeft;
+    const tileH = 80;
+    const startIndex = Math.floor(scrollPx / tileH);
+    const yOffset = -(scrollPx % tileH);
+
+    // Left strip
+    drawStrip(0, stripW, startIndex, yOffset, tileH, -1);
+    // Right strip
+    drawStrip(roadRight, W - roadRight, startIndex, yOffset, tileH, 1);
+  }
+
+  function drawStrip(x, w, startIndex, yOffset, tileH, side) {
+    // Background grass
+    ctx.fillStyle = '#1f2f1d';
+    ctx.fillRect(x, 0, w, H);
+    // Grass texture bands
+    for (let i = -1; i < Math.ceil(H / tileH) + 1; i++) {
+      const y = i * tileH + yOffset;
+      const idx = startIndex + i;
+      // grass colour variation
+      ctx.fillStyle = (idx % 2 === 0) ? '#264326' : '#2e5230';
+      ctx.fillRect(x, y, w, tileH / 2);
+      // A house or tree roughly every 2 tiles
+      if (idx % 2 === 0) {
+        drawHouse(x + w * 0.18, y + 16, w * 0.6, tileH - 24, idx, side);
+      } else {
+        drawTree(x + w * 0.5, y + 18, idx, side);
+      }
+    }
+  }
+
+  function drawHouse(x, y, w, h, idx, side) {
+    // Body
+    const colours = ['#6b4a2a', '#8a6240', '#5a3a20', '#7a5230'];
+    ctx.fillStyle = colours[idx % colours.length];
+    ctx.fillRect(x, y + h * 0.35, w, h * 0.65);
+    // Roof
+    ctx.fillStyle = '#3a2418';
+    ctx.beginPath();
+    ctx.moveTo(x - 3, y + h * 0.35);
+    ctx.lineTo(x + w / 2, y);
+    ctx.lineTo(x + w + 3, y + h * 0.35);
+    ctx.closePath();
+    ctx.fill();
+    // Window
+    ctx.fillStyle = 'rgba(244, 211, 94, 0.65)';
+    ctx.fillRect(x + w * 0.25, y + h * 0.55, w * 0.18, h * 0.2);
+    ctx.fillRect(x + w * 0.55, y + h * 0.55, w * 0.18, h * 0.2);
+    // Door
+    ctx.fillStyle = '#2a1808';
+    ctx.fillRect(x + w * 0.4, y + h * 0.78, w * 0.2, h * 0.22);
+    // Fence (occasional)
+    if (idx % 4 === 0) {
+      ctx.fillStyle = '#4a3520';
+      const fenceY = y + h;
+      for (let fx = 0; fx < w; fx += 6) {
+        ctx.fillRect(x + fx, fenceY, 2, 6);
+      }
+      ctx.fillRect(x, fenceY, w, 1);
+    }
+  }
+
+  function drawTree(cx, baseY, idx, side) {
+    // Trunk
+    ctx.fillStyle = '#3a2418';
+    ctx.fillRect(cx - 2, baseY + 18, 4, 14);
+    // Canopy
+    ctx.fillStyle = (idx % 2 === 0) ? '#2a4a25' : '#3a5a30';
+    ctx.beginPath();
+    ctx.arc(cx, baseY + 12, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#4a6a3a';
+    ctx.beginPath();
+    ctx.arc(cx - 4, baseY + 8, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawZombies(road) {
+    for (const z of state.zombies) {
+      // Convert "metres behind" to a screen Y: closer to runner => lower on screen.
+      // We anchor the runner at 78% of H. Each metre of lag adds ~6px upward.
+      const runnerScreenY = H * 0.78;
+      const lagPx = z.distFromRunner * 6;
+      const screenY = Math.max(H * 0.1, runnerScreenY - lagPx);
+      const x = laneCenterX(z.lane);
+
+      // Shuffle wobble
+      const sway = Math.sin(z.wobble) * 1.5;
+
+      // Body
+      ctx.fillStyle = z.kind === 'runner' ? '#c24444' : '#7a8c5a';
+      const w = z.kind === 'runner' ? 16 : 18;
+      const h = z.kind === 'runner' ? 22 : 20;
+      // Torso
+      ctx.fillRect(x - w / 2 + sway, screenY - h, w, h);
+      // Head
+      ctx.fillStyle = z.kind === 'runner' ? '#e6b0b0' : '#a8b585';
+      ctx.beginPath();
+      ctx.arc(x + sway, screenY - h - 4, 6, 0, Math.PI * 2);
+      ctx.fill();
+      // Arms (forward reaching)
+      ctx.fillStyle = z.kind === 'runner' ? '#c24444' : '#7a8c5a';
+      ctx.fillRect(x - w / 2 - 6 + sway, screenY - h + 4, 6, 4);
+      ctx.fillRect(x + w / 2 + sway, screenY - h + 4, 6, 4);
+      // Legs
+      const legWobble = Math.sin(z.wobble * 1.5) * 2;
+      ctx.fillRect(x - w / 2 - 2 + sway, screenY - 4, 4, 6 + legWobble);
+      ctx.fillRect(x + w / 2 - 2 + sway, screenY - 4, 4, 6 - legWobble);
+    }
+  }
+
+  function drawRunner(road, now) {
+    const x = laneCenterX(state.runnerLane);
+    const baseY = H * 0.78;
+    const bob = Math.sin((now || 0) / 90) * 1.5 * (state.runnerBob > 0 ? 1 : 0.4);
+    const y = baseY - bob;
+    if (state.runnerBob > 0) state.runnerBob = Math.max(0, state.runnerBob - 0.06);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(x, baseY + 4, 10, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Legs
+    const legPhase = Math.sin((now || 0) / 80);
+    ctx.fillStyle = '#1a2a40';
+    ctx.fillRect(x - 6, y - 4, 4, 10 + legPhase * 2);
+    ctx.fillRect(x + 2, y - 4, 4, 10 - legPhase * 2);
+
+    // Torso (green track top)
+    ctx.fillStyle = '#4caf50';
+    ctx.fillRect(x - 7, y - 22, 14, 18);
+    // Head
+    ctx.fillStyle = '#f1c27d';
+    ctx.beginPath();
+    ctx.arc(x, y - 26, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // Cap
+    ctx.fillStyle = '#1f6f2a';
+    ctx.fillRect(x - 7, y - 30, 14, 4);
+    // Arms (swing)
+    ctx.fillStyle = '#f1c27d';
+    ctx.fillRect(x - 10, y - 20 + legPhase * 1.5, 4, 10);
+    ctx.fillRect(x + 6, y - 20 - legPhase * 1.5, 4, 10);
+  }
+
+  function drawVignette() {
+    const grad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.4, W/2, H/2, Math.max(W,H)*0.7);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // ---- HUD ----
+  function updateHud() {
+    hudDistance.textContent = formatDistance(state.distance);
+    hudSteps.textContent    = state.steps.toString();
+    hudTime.textContent     = formatTime(state.elapsedMs);
+    hudRank.textContent     = user.rank || 'Bronze';
+    streakBadge.textContent = '🔥 ' + HQ.getStreak(user.id).count;
+  }
+
+  function updateLivesHud() {
+    const hearts = hudLives.querySelectorAll('.heart');
+    hearts.forEach((h, i) => h.classList.toggle('lost', i >= state.lives));
+    document.getElementById('hudLivesWrap').classList.toggle('alert', state.lives <= 1);
+  }
+
+  function formatDistance(m) {
+    if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
+    return Math.round(m) + ' m';
+  }
+  function formatTime(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+  }
+
+  // ---- Overlays / bonus ----
+  function showBonus(text) {
+    bonusToast.textContent = text;
+    bonusToast.classList.remove('show');
+    // force reflow so the animation restarts
+    void bonusToast.offsetWidth;
+    bonusToast.classList.add('show');
+  }
+
+  function showEndScreen(result) {
+    endOverlay.classList.add('show');
+    if (result === 'win') {
+      $('endEmoji').textContent = '🎉';
+      $('endTitle').textContent = 'You Escaped!';
+      $('endSubtitle').textContent = `${user.rank} rank cleared at ${formatDistance(state.distance)}.`;
+      // Estimate XP from milestones + base 50 for winning.
+      const milestoneXp = [...milestoneReached].reduce((s, m) => s + Math.floor((MILESTONE_REWARD[m] || 0) * 1.5), 0);
+      const totalXp = 50 + milestoneXp;
+      $('endXp').textContent = `+${totalXp} XP`;
+      // Calculate run medals using the helper from storage.js
+      const medals = (typeof HQ.calculateRunMedals === 'function')
+        ? HQ.calculateRunMedals(state.distance)
+        : { bronze: state.distance >= 500 ? 1 : 0, silver: 0, gold: 0 };
+      const medalRow = $('medalRow');
+      if (medalRow) {
+        medalRow.style.display = 'flex';
+        medalRow.querySelectorAll('.medal').forEach(el => {
+          const key = el.getAttribute('data-medal');
+          el.classList.toggle('earned', !!(medals && medals[key]));
+        });
+      }
+    } else {
+      $('endEmoji').textContent = '🧟';
+      $('endTitle').textContent = 'Caught!';
+      $('endSubtitle').textContent = 'The horde got you. Try again — the next run is on the house.';
+      $('endXp').textContent = '+0 XP';
+    }
+    $('endDistance').textContent = formatDistance(state.distance);
+    $('endSteps').textContent    = state.steps.toString();
+    $('endTime').textContent     = formatTime(state.elapsedMs);
+  }
+
+  // ---- History (last 5 runs) ----
+  function renderHistory() {
+    const acts = HQ.getActivities(user.id).filter(a => a.chase).slice(-5).reverse();
+    const wrap = $('history');
+    if (acts.length === 0) {
+      wrap.innerHTML = '<h3>Recent Runs</h3><div class="history-item"><div class="em">🏃</div><div><div>No runs yet</div><div class="meta">Press Start Chase to begin.</div></div></div>';
+      return;
+    }
+    let html = '<h3>Recent Runs</h3>';
+    for (const a of acts) {
+      const t = HQ.fmtRelative(a.date);
+      html += `
+        <div class="history-item">
+          <div class="em">🏃</div>
+          <div>
+            <div>${formatDistance(a.distance)} · ${a.duration}s</div>
+            <div class="meta">${a.steps} steps · ${t}</div>
+          </div>
+          <div class="ml">+${Math.max(0, (a.duration || 0) * 2 + 30)} XP</div>
+        </div>`;
+    }
+    wrap.innerHTML = html;
+  }
+
+  // ---- Init ----
+  function init() {
+    resize();
+    updateHud();
+    updateLivesHud();
+    // Intro copy
+    const target = distanceTarget();
+    introDetails.innerHTML = `
+      Your rank: <strong>${user.rank || 'Bronze'}</strong>.
+      Goal: <strong>${formatDistance(target)}</strong> without being caught.
+      <br/><br/>
+      Earn bonus coins at every 250m milestone. Faster ranks spawn runner zombies 🩸.
+    `;
+    renderHistory();
+  }
+  init();
+
+  // ---- Wire buttons ----
+  startBtn.addEventListener('click', startRun);
+  againBtn.addEventListener('click', () => {
+    endOverlay.classList.remove('show');
+    startRun();
+  });
+  backBtn.addEventListener('click', () => {
+    window.location.href = 'dashboard.html';
+  });
+})();
+</script>
+</body>
+</html>

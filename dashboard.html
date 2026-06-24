@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Dashboard</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/quests.js"></script>
+<script>
+// HealthQuest — Dashboard
+const user = HQ.requireAuth();
+if (!user) throw new Error('not authed');
+
+// Ensure fresh daily quests exist
+HQ.refreshQuestsForUser(user.id);
+
+const streak = HQ.getStreak(user.id);
+const rankIdx = HQ.RANKS.indexOf(user.rank || 'Bronze');
+const rankInfo = HQ.RANKS[rankIdx + 1] ? HQ.RANKS[rankIdx + 1] : user.rank;
+const xpForNext = HQ.RANK_THRESHOLDS[rankIdx + 1] || HQ.RANK_THRESHOLDS[rankIdx];
+const xpProgress = Math.min(100, Math.round(((user.xp || 0) / xpForNext) * 100));
+
+const allQuests = HQ.getQuestsForUser(user.id);
+const daily = allQuests.filter(q => q.type === 'daily');
+const completedToday = daily.filter(q => q.completedDates && q.completedDates.includes(HQ.todayKey())).length;
+
+const townshipRankings = HQ.getTownshipRankings().slice(0, 5);
+const myTownshipRank = townshipRankings.findIndex(t => t.name === user.township) + 1;
+
+document.getElementById('app').innerHTML = `
+  ${renderTopbar('HealthQuest', user)}
+  <main class="page">
+    <div class="hero-streak">
+      <div class="streak-flame">🔥</div>
+      <div class="streak-number">${streak.count}</div>
+      <div class="streak-label">Day Streak</div>
+    </div>
+
+    <div class="card rank-card rank-${(user.rank || 'Bronze').toLowerCase()}">
+      <div class="rank-header">
+        <div>
+          <div class="rank-badge">${HQ.rankIcon(user.rank)}</div>
+        </div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:18px">${user.rank} Rank</div>
+          <div style="font-size:13px;color:var(--text-muted)">Next: ${rankInfo}</div>
+          <div class="rank-progress"><div class="rank-progress-fill" style="width:${xpProgress}%"></div></div>
+          <div style="font-size:12px;margin-top:4px;color:var(--text-muted)">${user.xp || 0} / ${xpForNext} XP</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${user.xp || 0}</div><div class="stat-label">Total XP</div></div>
+      <div class="stat-card"><div class="stat-value">${user.coins || 0}</div><div class="stat-label">Coins</div></div>
+      <div class="stat-card"><div class="stat-value">${(user.badges || []).length}</div><div class="stat-label">Badges</div></div>
+      <div class="stat-card"><div class="stat-value">${daily.length ? completedToday + '/' + daily.length : 0}</div><div class="stat-label">Quests Today</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Today's Quests</h3>
+        <a href="quests.html" class="link">View all →</a>
+      </div>
+      ${daily.length === 0 ? '<p class="muted">No quests yet. Visit the quests page to start.</p>' : daily.slice(0, 3).map(q => {
+        const tk = HQ.todayKey();
+        const isDone = q.completedDates && q.completedDates.includes(tk);
+        const trigger = questHint(q);
+        return `
+        <div class="quest-item ${isDone ? 'completed' : ''}">
+          <div class="quest-icon">${isDone ? '✅' : q.icon}</div>
+          <div style="flex:1">
+            <div style="font-weight:600">${q.title}</div>
+            <div style="font-size:12px;color:var(--text-muted)">+${q.xp} XP · +${q.coins} coins${trigger ? ' · ' + trigger : ''}</div>
+          </div>
+          ${isDone ? '<span class="quest-status">Done</span>' : '<span class="quest-status muted">Auto</span>'}
+        </div>
+      `;
+      }).join('')}
+    </div>
+
+    <div class="card">
+      <h3>Community Ranking</h3>
+      <p class="muted">Townships compete for the monthly crown 🏆</p>
+      <div class="ranking-list">
+        ${townshipRankings.map((t, idx) => `
+          <div class="ranking-item ${t.name === user.township ? 'highlight' : ''}">
+            <div class="rank-position">${idx + 1}</div>
+            <div style="flex:1;font-weight:600">${t.name}</div>
+            <div style="color:var(--text-muted);font-size:13px">${t.xp} XP</div>
+          </div>
+        `).join('')}
+      </div>
+      ${myTownshipRank > 0 ? `<p class="muted" style="margin-top:8px">Your township <strong>${user.township}</strong> is ranked <strong>#${myTownshipRank}</strong></p>` : ''}
+    </div>
+
+    <div class="card">
+      <h3>Quick Actions</h3>
+      <div class="quick-actions">
+        <a href="activity.html" class="quick-action"><div class="qa-icon">🏃</div><div>Log Activity</div></a>
+        <a href="medication.html" class="quick-action"><div class="qa-icon">💊</div><div>Medications</div></a>
+        <a href="events.html" class="quick-action"><div class="qa-icon">📅</div><div>Events</div></a>
+        <a href="run.html" class="quick-action"><div class="qa-icon">🧟</div><div>Run (Zombies!)</div></a>
+        <a href="community.html" class="quick-action"><div class="qa-icon">📣</div><div>Feed</div></a>
+      </div>
+    </div>
+  </main>
+  ${renderBottomNav('dashboard')}
+`;
+
+function questHint(q) {
+  const hints = {
+    'walk-3k-steps': 'log a 3km walk',
+    'walk-5k-steps': 'log a 5km walk',
+    'water-2l': 'log drinking 2L of water',
+    'water-3l': 'log drinking 3L of water',
+    'healthy-meal': 'log a healthy meal',
+    'no-sugar': 'tap to skip sugary drinks',
+    'meditation-10': 'log 10 min meditation',
+    'sleep-7': 'log 7+ hours of sleep',
+    'no-smoke': 'stay smoke-free today',
+    'log-activity': 'log any activity',
+    'medication-taken': 'mark medication taken',
+  };
+  return hints[q.baseId] || '';
+}
+</script>
+</body>
+</html>

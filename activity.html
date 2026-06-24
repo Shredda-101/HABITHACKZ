@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Activity</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script>
+const user = HQ.requireAuth();
+if (!user) throw new Error('not authed');
+
+const ACTIVITY_TYPES = [
+  { id: 'walk', icon: '🚶', label: 'Walk', defaultDistance: 3, unit: 'km' },
+  { id: 'run', icon: '🏃', label: 'Run', defaultDistance: 5, unit: 'km' },
+  { id: 'soccer', icon: '⚽', label: 'Soccer', defaultDistance: 0, unit: 'min', useDuration: true },
+  { id: 'gym', icon: '🏋️', label: 'Gym', defaultDistance: 0, unit: 'min', useDuration: true }
+];
+
+let selectedType = 'walk';
+let duration = 30;
+let distance = 3;
+
+function render() {
+  const activities = HQ.getActivities(user.id);
+  const today = activities.filter(a => isToday(a.date));
+  const totalStepsToday = activities.filter(a => isToday(a.date) && (a.type === 'walk' || a.type === 'run'))
+    .reduce((s, a) => s + Math.round((a.distance || 0) * 1312), 0);
+
+  return `
+    ${renderTopbar('🏃 Activity', user)}
+    <div class="container">
+      <div class="card">
+        <h2>Log an Activity</h2>
+        <p class="muted">play the chase</p>
+        <div class="type-picker">
+          ${ACTIVITY_TYPES.map(t => `
+            <div class="type-tile ${selectedType === t.id ? 'selected' : ''}" onclick="selectType('${t.id}')">
+              <div style="font-size:32px">${t.icon}</div>
+              <div>${t.label}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="form-group">
+          <label>Duration (minutes)</label>
+          <input type="number" id="duration" value="${duration}" min="1" oninput="duration = parseInt(this.value) || 0">
+        </div>
+
+        <div class="form-group" id="distance-group">
+          <label>Distance (km)</label>
+          <input type="number" id="distance" value="${distance}" step="0.1" min="0" oninput="distance = parseFloat(this.value) || 0">
+        </div>
+
+        <button class="btn-primary" onclick="saveActivity()">Log Activity</button>
+      </div>
+
+      <div class="stat-grid card">
+        <div><div class="stat-value">${today.length}</div><div class="stat-label">Activities today</div></div>
+        <div><div class="stat-value">${totalStepsToday.toLocaleString()}</div><div class="stat-label">Steps today</div></div>
+      </div>
+
+      <div class="section-header"><h2>Recent Activities</h2></div>
+      ${activities.length === 0 ? '<div class="card empty-state">No activities logged yet. Get moving! 💪</div>' : ''}
+      ${activities.slice().reverse().slice(0, 10).map(a => {
+        const t = ACTIVITY_TYPES.find(x => x.id === a.type) || ACTIVITY_TYPES[0];
+        return `
+          <div class="card activity-card">
+            <div class="activity-icon">${t.icon}</div>
+            <div class="activity-body">
+              <div class="activity-title">${t.label}</div>
+              <div class="activity-meta">${a.duration} min${a.distance ? ' · ' + a.distance + ' km' : ''} · ${timeAgo(a.date)}</div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    ${renderBottomNav('activity')}
+  `;
+}
+
+function isToday(ts) {
+  const d = new Date(ts), now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24);
+  return d + 'd ago';
+}
+
+window.selectType = function(typeId) {
+  selectedType = typeId;
+  const t = ACTIVITY_TYPES.find(x => x.id === typeId);
+  if (t.defaultDistance) distance = t.defaultDistance;
+  render();
+};
+
+window.saveActivity = function() {
+  const dur = parseInt(document.getElementById('duration').value) || 0;
+  const dist = parseFloat(document.getElementById('distance').value) || 0;
+  if (dur <= 0) { alert('Please enter a duration greater than 0'); return; }
+  const t = ACTIVITY_TYPES.find(x => x.id === selectedType);
+  HQ.logActivity(user.id, { type: selectedType, duration: dur, distance: dist });
+  alert(`✅ ${t.label} logged! +${HQ.activityXP(t, dur, dist)} XP awarded.`);
+  render();
+};
+
+document.getElementById('app').innerHTML = render();
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Login</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>🌿 HealthQuest</h1>
+      <p>Your township health journey starts here</p>
+    </div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label class="form-label" for="loginUsername">Username or Email</label>
+        <input class="form-input" id="loginUsername" name="username" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="loginPassword">Password</label>
+        <input class="form-input" id="loginPassword" name="password" type="password" required autocomplete="current-password">
+      </div>
+      <div id="loginError" class="form-error" style="margin-bottom:8px"></div>
+      <button type="submit" class="btn btn-primary">Log In</button>
+    </form>
+    <div class="auth-link">
+      New here? <a href="register.html">Create an account</a>
+    </div>
+  </div>
+</div>
+<script src="js/storage.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const id = document.getElementById('loginUsername').value.trim();
+  const pw = document.getElementById('loginPassword').value;
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+  const user = HQ.findUserByUsername(id) || HQ.findUserByEmail(id);
+  if (!user || user.password !== pw) {
+    err.textContent = 'Invalid username/email or password.';
+    return;
+  }
+  HQ.setSession(user.id);
+  HQ.toast('Welcome back, ' + user.fullName.split(' ')[0] + '!');
+  setTimeout(() => window.location.href = 'dashboard.html', 500);
+});
+</script>
+</body>
+</html>

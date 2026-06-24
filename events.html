@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Events</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script>
+const user = HQ.requireAuth();
+if (!user) throw new Error('not authed');
+
+let activeFilter = 'all';
+
+function render() {
+  const events = HQ.getEvents();
+  const filtered = activeFilter === 'all' ? events : events.filter(e => e.type === activeFilter);
+  const saved = HQ.getSavedEvents(user.id);
+  const joined = HQ.getJoinedEvents(user.id);
+
+  const eventTypes = ['all', ...new Set(events.map(e => e.type))];
+
+  return `
+    ${renderTopbar('📅 Events', user)}
+    <div class="container">
+      <div class="filter-bar">
+        ${eventTypes.map(t => `
+          <button class="filter-chip ${activeFilter === t ? 'active' : ''}" data-filter="${t}">
+            ${t === 'all' ? '🌐 All' : t}
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="section-header"><h2>Upcoming Events</h2></div>
+      ${filtered.length === 0 ? '<div class="card empty-state">No events in this category yet.</div>' : ''}
+      ${filtered.map(e => {
+        const isSaved = HQ.isEventSaved(user.id, e.id);
+        const isJoined = HQ.isEventJoined(user.id, e.id);
+        const dateStr = new Date(e.date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' });
+        return `
+          <div class="card event-card">
+            <div class="event-date">
+              <div class="event-day">${new Date(e.date).getDate()}</div>
+              <div class="event-month">${new Date(e.date).toLocaleDateString('en', { month: 'short' })}</div>
+            </div>
+            <div class="event-info">
+              <div class="event-title">${e.title}</div>
+              <div class="event-meta">📍 ${e.location}</div>
+              <div class="event-meta">📅 ${dateStr} · ${e.type}</div>
+              <div class="event-desc">${e.description}</div>
+              <div class="event-actions">
+                ${isJoined
+                  ? '<button class="btn-small btn-success" disabled>✅ Joined (+50 XP)</button>'
+                  : `<button class="btn-small btn-primary" onclick="joinEvent('${e.id}')">Join Event</button>`}
+                <button class="btn-small btn-secondary" onclick="toggleSave('${e.id}')">
+                  ${isSaved ? '★ Saved' : '☆ Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+
+      ${saved.length > 0 ? `
+        <div class="section-header"><h2>★ Saved Events</h2></div>
+        ${saved.map(e => `
+          <div class="card event-card compact">
+            <div class="event-info">
+              <div class="event-title">${e.title}</div>
+              <div class="event-meta">📍 ${e.location} · ${new Date(e.date).toLocaleDateString()}</div>
+            </div>
+            <button class="btn-small btn-secondary" onclick="toggleSave('${e.id}')">Remove</button>
+          </div>
+        `).join('')}
+      ` : ''}
+
+      ${joined.length > 0 ? `
+        <div class="section-header"><h2>✅ Events I'm Joining</h2></div>
+        ${joined.map(e => `
+          <div class="card event-card compact success-border">
+            <div class="event-info">
+              <div class="event-title">${e.title}</div>
+              <div class="event-meta">📍 ${e.location} · ${new Date(e.date).toLocaleDateString()}</div>
+            </div>
+          </div>
+        `).join('')}
+      ` : ''}
+    </div>
+    ${renderBottomNav('events')}
+  `;
+}
+
+window.toggleSave = function(eventId) {
+  if (HQ.isEventSaved(user.id, eventId)) HQ.unsaveEvent(user.id, eventId);
+  else HQ.saveEvent(user.id, eventId);
+  render();
+};
+
+window.joinEvent = function(eventId) {
+  HQ.joinEvent(user.id, eventId);
+  alert('You joined the event! +50 XP, +15 coins 🪙');
+  render();
+};
+
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('filter-chip')) {
+    activeFilter = e.target.dataset.filter;
+    render();
+  }
+});
+
+document.getElementById('app').innerHTML = render();
+</script>
+</body>
+</html>

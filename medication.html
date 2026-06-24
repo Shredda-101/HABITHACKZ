@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Medication</title>
+<link rel="stylesheet" href="css/styles.css">
+<style>
+  .proof-thumb {
+    max-height: 60px;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script>
+const user = HQ.requireAuth();
+if (!user) throw new Error('not authed');
+
+const MED_FREQ = ['Once daily', 'Twice daily', 'Three times daily', 'As needed'];
+
+function render() {
+  const meds = HQ.getMedications(user.id);
+  const logs = HQ.getMedicationLogs(user.id);
+  const todayKey = new Date().toISOString().split('T')[0];
+  const todaysLogs = logs.filter(l => new Date(l.takenAt).toISOString().split('T')[0] === todayKey);
+
+  return `
+    ${renderTopbar('💊 Medication', user)}
+    <div class="container">
+      <div class="card">
+        <h2>Add Medication</h2>
+        <div class="form-group">
+          <label>Medication Name</label>
+          <input id="med-name" placeholder="e.g. Metformin">
+        </div>
+        <div class="form-group">
+          <label>Dosage</label>
+          <input id="med-dose" placeholder="e.g. 500mg">
+        </div>
+        <div class="form-group">
+          <label>Frequency</label>
+          <select id="med-freq">${MED_FREQ.map(f => `<option>${f}</option>`).join('')}</select>
+        </div>
+        <div class="form-group">
+          <label>Reminder Time</label>
+          <input id="med-time" type="time" value="08:00">
+        </div>
+        <button class="btn-primary" onclick="addMedication()">Add Medication</button>
+      </div>
+
+      <div class="section-header"><h2>Today's Compliance</h2></div>
+      <div class="card compliance-card">
+        <div class="compliance-num">${todaysLogs.length}/${meds.length}</div>
+        <div class="compliance-label">doses logged today</div>
+      </div>
+
+      <div class="section-header"><h2>Your Medications</h2></div>
+      ${meds.length === 0 ? '<div class="card empty-state">No medications added yet.</div>' : ''}
+      ${meds.map(m => {
+        const logged = todaysLogs.some(l => l.medicationId === m.id);
+        if (logged) {
+          return `
+            <div class="card med-card">
+              <div class="med-info">
+                <div class="med-name">${m.name} ${m.dose ? '· ' + m.dose : ''}</div>
+                <div class="med-meta">${m.frequency} · Reminder ${m.time}</div>
+              </div>
+              <span class="badge badge-success">✅ Taken</span>
+              <button class="btn-small btn-danger" onclick="removeMed('${m.id}')">×</button>
+            </div>
+          `;
+        }
+        return `
+          <div class="card med-card">
+            <div class="med-info">
+              <div class="med-name">${m.name} ${m.dose ? '· ' + m.dose : ''}</div>
+              <div class="med-meta">${m.frequency} · Reminder ${m.time}</div>
+            </div>
+            <div class="form-group" style="margin-top: 8px;">
+              <input type="file" accept="image/*" capture="environment" id="proof-${m.id}">
+            </div>
+            <button class="btn-small btn-primary" onclick="verifyMed('${m.id}')">Mark Taken</button>
+            <button class="btn-small btn-danger" onclick="removeMed('${m.id}')">×</button>
+          </div>
+        `;
+      }).join('')}
+
+      <div class="section-header"><h2>Proof Log</h2></div>
+      ${logs.length === 0 ? '<div class="card empty-state">No medication logs yet.</div>' : ''}
+      ${logs.slice().reverse().slice(0, 5).map(l => `
+        <div class="card proof-card">
+          <div class="proof-icon">
+            ${l.photoProof
+              ? `<img class="proof-thumb" src="${l.photoProof}" alt="photo proof">`
+              : '✅'}
+          </div>
+          <div class="proof-info">
+            <div class="proof-title">${l.name} ${l.dose || ''}</div>
+            <div class="proof-time">${new Date(l.takenAt).toLocaleString()}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ${renderBottomNav('medication')}
+  `;
+}
+
+window.addMedication = function() {
+  const name = document.getElementById('med-name').value.trim();
+  const dose = document.getElementById('med-dose').value.trim();
+  const freq = document.getElementById('med-freq').value;
+  const time = document.getElementById('med-time').value;
+  if (!name) { alert('Please enter a medication name'); return; }
+  HQ.addMedication(user.id, { name, dose, frequency: freq, time });
+  render();
+};
+
+window.verifyMed = function(medId) {
+  const fileInput = document.getElementById('proof-' + medId);
+  const file = fileInput && fileInput.files && fileInput.files[0];
+
+  const submit = function(photoBase64) {
+    HQ.logMedication(user.id, medId, photoBase64 || null);
+    alert('✅ Medication logged! +15 XP');
+    render();
+  };
+
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      submit(e.target.result);
+    };
+    reader.onerror = function() {
+      submit(null);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    submit(null);
+  }
+};
+
+window.removeMed = function(medId) {
+  if (confirm('Remove this medication?')) {
+    HQ.removeMedication(user.id, medId);
+    render();
+  }
+};
+
+document.getElementById('app').innerHTML = render();
+</script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Set Your Goals</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script>
+const user = HQ.requireAuth();
+if (!user) throw new Error('not authed');
+
+const isNew = getPageParam('new') === '1';
+const goals = user.goals || [];
+const interests = user.interests || [];
+
+const goalOptions = [
+  { id: 'lose-weight', icon: '⚖️', label: 'Lose Weight' },
+  { id: 'manage-diabetes', icon: '💉', label: 'Manage Diabetes' },
+  { id: 'lower-bp', icon: '❤️', label: 'Lower Blood Pressure' },
+  { id: 'build-muscle', icon: '💪', label: 'Build Muscle' },
+  { id: 'eat-better', icon: '🥗', label: 'Eat Healthier' },
+  { id: 'reduce-stress', icon: '🧘', label: 'Reduce Stress' },
+  { id: 'sleep-better', icon: '😴', label: 'Sleep Better' },
+  { id: 'quit-smoking', icon: '🚭', label: 'Quit Smoking' }
+];
+
+const interestOptions = [
+  { id: 'walking', icon: '🚶', label: 'Walking' },
+  { id: 'running', icon: '🏃', label: 'Running' },
+  { id: 'soccer', icon: '⚽', label: 'Soccer' },
+  { id: 'cycling', icon: '🚴', label: 'Cycling' },
+  { id: 'gym', icon: '🏋️', label: 'Gym' },
+  { id: 'yoga', icon: '🧘', label: 'Yoga' },
+  { id: 'dancing', icon: '💃', label: 'Dancing' },
+  { id: 'swimming', icon: '🏊', label: 'Swimming' }
+];
+
+function render() {
+  document.getElementById('app').innerHTML = `
+    ${renderTopbar('Your Goals', user)}
+    <main class="page">
+      ${isNew ? '<div class="banner"><h2>Welcome, ' + user.fullName.split(' ')[0] + '! 🎉</h2><p>Let\'s personalise your journey.</p></div>' : ''}
+      <div class="card">
+        <h3>What do you want to achieve?</h3>
+        <p class="muted">Pick one or more health goals.</p>
+        <div class="chip-grid" id="goalGrid">
+          ${goalOptions.map(g => `
+            <button class="chip ${goals.includes(g.id) ? 'selected' : ''}" data-id="${g.id}">
+              <div class="chip-icon">${g.icon}</div>
+              <div>${g.label}</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>What activities interest you?</h3>
+        <p class="muted">Pick one or more activities.</p>
+        <div class="chip-grid" id="interestGrid">
+          ${interestOptions.map(g => `
+            <button class="chip ${interests.includes(g.id) ? 'selected' : ''}" data-id="${g.id}">
+              <div class="chip-icon">${g.icon}</div>
+              <div>${g.label}</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <button id="saveBtn" class="btn btn-primary">${isNew ? 'Continue to Dashboard' : 'Save Goals'}</button>
+    </main>
+    ${renderBottomNav('')}
+  `;
+  bind();
+}
+
+function bind() {
+  document.querySelectorAll('#goalGrid .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('selected');
+    };
+  });
+  document.querySelectorAll('#interestGrid .chip').forEach(c => {
+    c.onclick = () => {
+      c.classList.toggle('selected');
+    };
+  });
+  document.getElementById('saveBtn').onclick = () => {
+    const g = Array.from(document.querySelectorAll('#goalGrid .chip.selected')).map(el => el.dataset.id);
+    const i = Array.from(document.querySelectorAll('#interestGrid .chip.selected')).map(el => el.dataset.id);
+    if (!g.length || !i.length) { HQ.toast('Pick at least one goal and one interest.'); return; }
+    user.goals = g;
+    user.interests = i;
+    HQ.updateUser(user.id, { goals: g, interests: i });
+    HQ.toast('Goals saved! +20 XP 🎯');
+    HQ.addXP(user.id, 20);
+    setTimeout(() => window.location.href = isNew ? 'dashboard.html' : 'profile.html', 600);
+  };
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#4CAF50">
+<title>HealthQuest — Register</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>🌿 HealthQuest</h1>
+      <p>Create your account and start your quest</p>
+    </div>
+    <form id="registerForm">
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input class="form-input" id="fullName" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="email" type="email" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" id="username" required minlength="3">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="password" type="password" required minlength="8">
+        <small style="color:var(--text-muted)">At least 8 characters</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input class="form-input" id="confirmPassword" type="password" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Age</label>
+        <input class="form-input" id="age" type="number" min="13" max="120" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Township</label>
+        <select class="form-input" id="township" required>
+          <option value="">Select your township</option>
+          <option>Mamelodi</option>
+          <option>Soshanguve</option>
+          <option>Tembisa</option>
+          <option>Atteridgeville</option>
+          <option>Hammanskraal</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div id="regError" class="form-error" style="margin-bottom:8px"></div>
+      <button type="submit" class="btn btn-primary">Create Account</button>
+    </form>
+    <div class="auth-link">
+      Already have an account? <a href="index.html">Log in</a>
+    </div>
+  </div>
+</div>
+<script src="js/storage.js"></script>
+<script>
+document.getElementById('registerForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const data = {
+    id: HQ.uid(),
+    fullName: document.getElementById('fullName').value.trim(),
+    email: document.getElementById('email').value.trim().toLowerCase(),
+    username: document.getElementById('username').value.trim().toLowerCase(),
+    password: document.getElementById('password').value,
+    age: parseInt(document.getElementById('age').value, 10),
+    township: document.getElementById('township').value,
+    profilePhoto: null,
+    createdAt: Date.now(),
+    xp: 0,
+    coins: 50,
+    rank: 'Bronze',
+    streakDays: 0
+  };
+  const err = document.getElementById('regError');
+  err.textContent = '';
+  if (data.password.length < 8) { err.textContent = 'Password must be at least 8 characters.'; return; }
+  if (data.password !== document.getElementById('confirmPassword').value) { err.textContent = 'Passwords do not match.'; return; }
+  if (HQ.findUserByEmail(data.email)) { err.textContent = 'Email already registered.'; return; }
+  if (HQ.findUserByUsername(data.username)) { err.textContent = 'Username already taken.'; return; }
+  HQ.saveUser(data);
+  HQ.setSession(data.id);
+  HQ.toast('Account created! Welcome bonus: 50 coins 🎉');
+  setTimeout(() => window.location.href = 'goals.html?new=1', 700);
+});
+</script>
+</body>
+</html>
